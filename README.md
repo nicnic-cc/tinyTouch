@@ -241,6 +241,24 @@ the fingerprint sensor connects over uart to pins 6 and 7 for tx and rx.
 the interrupt pin can be connected anywhere. in firmware, it is connected to pin
 1.
 
+use an esp32-s3 super mini or seeed studio xiao esp32-s3 with a zw101-style uart
+fingerprint sensor. use 3.3v power and logic.
+
+### wire the sensor
+
+| sensor pin | signal | esp32-s3 | XIAO |
+| -- | -- | -- | -- |
+| 1 | VTouch | 3V3 | 3V3 |
+| 2 | TouchOut | GPIO2 | D1 |
+| 3 | VCC | 3V3 | 3V3 |
+| 4 | TX | GPIO44 (RX) | D7 |
+| 5 | RX | GPIO43 (TX) | D6 |
+| 6 | GND | GND | GND |
+
+the uart pair is crossed: sensor tx goes to board rx. sensor rx goes to board tx.
+
+check continuity. confirm that 3v3 and gnd are not shorted before connecting usb.
+
 ## notes
 
 do not commit:
