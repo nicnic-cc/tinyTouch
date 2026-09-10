@@ -23,6 +23,7 @@ static const uint8_t FP_LED_GREEN = 0x02;
 static const uint8_t FP_LED_RED = 0x04;
 static const uint8_t FP_LED_WHITE = 0x01 | 0x02 | 0x04;
 static const uint8_t FP_LED_FUNC_STEADY = 3;
+static const uint8_t FP_LED_FUNC_OFF = 4;
 
 static SemaphoreHandle_t fp_mutex;
 static volatile bool prompted_authorization_active;
@@ -199,15 +200,29 @@ static void set_aura(uint8_t color) {
   fp_command(0x3c, params, sizeof(params), &confirm, NULL, NULL, 1000);
 }
 
+static void set_aura_off(void) {
+  uint8_t params[] = {FP_LED_FUNC_OFF, 0, 0, 0};
+  uint8_t confirm = 0xff;
+  fp_command(0x3c, params, sizeof(params), &confirm, NULL, NULL, 1000);
+}
+
 static void show_result(bool ok) {
   set_aura(ok ? FP_LED_GREEN : FP_LED_RED);
   vTaskDelay(pdMS_TO_TICKS(350));
-  set_aura(FP_LED_WHITE);
+  set_aura_off();
 }
 
 void fingerprint_led_idle(void) {
   if (!fp_take(1000)) return;
+  set_aura_off();
+  fp_give();
+}
+
+void fingerprint_led_connect_flash(void) {
+  if (!fp_take(1000)) return;
   set_aura(FP_LED_WHITE);
+  vTaskDelay(pdMS_TO_TICKS(350));
+  set_aura_off();
   fp_give();
 }
 
@@ -340,7 +355,7 @@ void fingerprint_init(void) {
     if (!ok && attempt < 3) vTaskDelay(pdMS_TO_TICKS(250));
   }
   ESP_LOGI(TAG, "sensor verify: %s", ok ? "ok" : "failed");
-  if (ok) fingerprint_led_idle();
+  if (ok) fingerprint_led_connect_flash();
 }
 
 bool fingerprint_is_ready(void) {
