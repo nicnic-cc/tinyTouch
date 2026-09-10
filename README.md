@@ -1,5 +1,5 @@
-## interested in preassembled versions? pre order now:
-[tinytouch.dev](https://tinytouch.dev)
+**this is a fork of [ZimengXiong/tinyTouch](https://github.com/ZimengXiong/tinyTouch).**
+see [changed from upstream](#changed-from-upstream) for what's different here.
 
 <img width="2304" height="1152" alt="tinyTouch (4)" src="https://github.com/user-attachments/assets/ec66ec7d-3e14-4292-8085-15374e349057" />
 
@@ -19,18 +19,16 @@ PIV authentication of lockscreen (you know its PIV because it says PIN and not p
 
 https://github.com/user-attachments/assets/88014cb2-34d2-4d63-8998-54f0561364eb
 
-if you would like to support this project, please consider [donating](https://github.com/sponsors/ZimengXiong) or contributing!
-
-
 ## table of contents
 
 - [red pill or blue pill?](#red-pill-or-blue-pill)
 - [install](#install)
-  - [red pill](#red-pill)
-  - [blue pill](#blue-pill)
+  - [flash](#flash)
+  - [configure](#configure)
 - [hardware](#hardware)
 - [wiring](#wiring)
 - [notes](#notes)
+- [changed from upstream](#changed-from-upstream)
 
 ## red pill or blue pill?
 
@@ -136,89 +134,52 @@ cards, like login and `sudo` with pam.
 
 ## install
 
-### red pill
-use this if you just want the thing to type your password.
+tinyTouch ships as one firmware image ([`firmware/tiny_touch_unified`](firmware/tiny_touch_unified))
+that supports both HID and PIV mode. flash it once, then choose - or later
+switch - mode through the `tinytouch` CLI. there is no separate firmware per
+mode anymore.
+
+note: the `docs.tinytouch.dev` links below (and the build guide video above)
+point to upstream's hosted docs, not something this fork maintains - they
+still apply since the flashing/CLI/setup flow here is unchanged from upstream.
+
+### flash
+
+**build from source:** follow [`firmware/README.md`](firmware/README.md) for
+the ESP-IDF 5.3.x setup.
+
+then, from the repo root:
 
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r software/macos-helper/requirements.txt
-
-pairing_key="$(openssl rand -hex 32)"
-.venv/bin/python software/macos-helper/tinytouch_helper.py --set-pairing-key "$pairing_key"
-.venv/bin/python software/macos-helper/tinytouch_helper.py --set-password 'your-password-here'
-
-cp firmware/tiny_touch_keyboard/secrets.example.h firmware/tiny_touch_keyboard/secrets.h
+./firmware/build-and-flash
 ```
 
-edit `firmware/tiny_touch_keyboard/secrets.h` so it contains the same pairing
-key bytes, then flash `firmware/tiny_touch_keyboard/tiny_touch_keyboard.ino`
-with arduino ide.
+once flashing finishes, **unplug and reconnect USB once.** the
+fingerprint sensor stays powered through an MCU reset, so the device won't
+respond to setup until it sees a fresh USB reconnect.
 
-board settings used here:
+### configure
 
-```text
-usb cdc on boot: enabled
-usb mode: usb-otg
-```
-
-run the helper:
+from the repo root:
 
 ```sh
-.venv/bin/python software/macos-helper/tinytouch_helper.py
+./tinytouch setup
 ```
 
-for launchd, edit paths in
-`software/macos-helper/launchd/com.tinytouch.helper.plist`, then copy it to
-`~/Library/LaunchAgents/`.
+follow the prompts. it walks you through:
 
-### blue pill
+- choosing **PIV** or **HID** mode - see
+  [red pill or blue pill?](#red-pill-or-blue-pill) above for the trade-offs
+- PIV: creating the on-device PIV identity and pairing it with `sc_auth`
+- HID: setting the Keychain password tinyTouch will type, and installing its
+  background helper
+- enrolling your fingerprint (four touches, different views)
 
-use this if you want the current better path. it exposes piv over ccid, plus hid
-only for the dummy pin `000000`.
-
-`main/secrets.h` needs the piv certs and private keys for slots `9a` and `9d`.
-
-generate test keys:
-
-```sh
-cd firmware/tiny_touch_smartcard
-openssl req -newkey rsa:2048 -nodes -keyout piv_key_9a.pem -x509 -days 3650 -out piv_cert_9a.pem -subj "/CN=tinytouch piv auth/"
-openssl req -newkey rsa:2048 -nodes -keyout piv_key_9d.pem -x509 -days 3650 -out piv_cert_9d.pem -subj "/CN=tinytouch piv key management/"
-cp main/secrets.example.h main/secrets.h
-```
-
-then paste:
-
-- `piv_cert_9a.pem` into `PIV_CERT_9A_PEM`
-- `piv_key_9a.pem` into `PIV_PRIVATE_KEY_9A_PEM`
-- `piv_cert_9d.pem` into `PIV_CERT_9D_PEM`
-- `piv_key_9d.pem` into `PIV_PRIVATE_KEY_9D_PEM`
-
-build and flash:
-
-```sh
-idf.py set-target esp32s3
-idf.py build
-idf.py -p /dev/cu.usbmodem101 flash
-```
-
-after flashing:
-
-```sh
-system_profiler SPSmartCardsDataType
-sc_auth identities
-sudo sc_auth pair -u "$USER" -h <auth-cert-hash>
-```
-
-to test sudo:
-
-```sh
-sudo -k
-sudo -v
-```
-
-when macos asks for the pin, touch the sensor.
+switch modes later with `tinytouch mode piv` / `tinytouch mode hid`. full
+command reference:
+[docs.tinytouch.dev/reference/cli](https://docs.tinytouch.dev/reference/cli).
+if setup won't complete, see
+[docs.tinytouch.dev/customer/recovery](https://docs.tinytouch.dev/customer/recovery).
 
 ## hardware
 
@@ -261,15 +222,8 @@ check continuity. confirm that 3v3 and gnd are not shorted before connecting usb
 
 ## notes
 
-do not commit:
-
-- `firmware/tiny_touch_keyboard/secrets.h`
-- `firmware/tiny_touch_smartcard/main/secrets.h`
-
 [cad](https://cad.onshape.com/documents/d0e6bb7977e6171d4e4a5086/w/1ded27ad6c634fd1fdaf26d0/e/aca67210e400490a08d0b29a?renderMode=0&uiState=6a4c1df32e292f12144a65fe). if you make changes, please make them open source as well.
 
-## bonus images
+## changed from upstream
 
-<img width="2261" height="1347" alt="render2" src="https://github.com/user-attachments/assets/5f107d74-d651-4e3b-90ed-f37dcaa026ac" />
-<img width="1238" height="901" alt="cross" src="https://github.com/user-attachments/assets/6a7062d9-ec56-4aac-adad-00d888e7d486" />
-<img width="1280" height="957" alt="tinyTouch" src="https://github.com/user-attachments/assets/ad66c9b3-5823-44d3-bd73-bba64f2e60ab" />
+- fingerprint sensor idle LED is white instead of blue (`firmware/tiny_touch_unified/main/fingerprint.c`, `set_aura`/`FP_LED_WHITE`). match/enroll results still flash green (success) or red (failure) before returning to white.

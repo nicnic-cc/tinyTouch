@@ -19,9 +19,9 @@ static const int INT_ACTIVE_VALUE = 1;
 static const uint16_t START_SLOT = 1;
 static const uint16_t END_SLOT = 5;
 static const uint32_t FINGER_WAIT_MS = 7000;
-static const uint8_t FP_LED_BLUE = 0x01;
 static const uint8_t FP_LED_GREEN = 0x02;
 static const uint8_t FP_LED_RED = 0x04;
+static const uint8_t FP_LED_WHITE = 0x01 | 0x02 | 0x04;
 static const uint8_t FP_LED_FUNC_STEADY = 3;
 
 static SemaphoreHandle_t fp_mutex;
@@ -202,12 +202,12 @@ static void set_aura(uint8_t color) {
 static void show_result(bool ok) {
   set_aura(ok ? FP_LED_GREEN : FP_LED_RED);
   vTaskDelay(pdMS_TO_TICKS(350));
-  set_aura(FP_LED_BLUE);
+  set_aura(FP_LED_WHITE);
 }
 
 void fingerprint_led_idle(void) {
   if (!fp_take(1000)) return;
-  set_aura(FP_LED_BLUE);
+  set_aura(FP_LED_WHITE);
   fp_give();
 }
 
@@ -453,7 +453,7 @@ static bool wait_finger_removed(uint32_t timeout_ms) {
 bool fingerprint_enroll(uint16_t slot, void (*prompt)(const char *message)) {
   if (slot < START_SLOT || slot > END_SLOT || !fp_take(1000)) return false;
   bool ok = false;
-  set_aura(FP_LED_BLUE);
+  set_aura(FP_LED_WHITE);
   if (prompt) prompt("TOUCH");
   if (!wait_capture_template(1, 15000)) goto done;
   if (prompt) prompt("LIFT");
