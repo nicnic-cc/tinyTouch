@@ -227,3 +227,4 @@ check continuity. confirm that 3v3 and gnd are not shorted before connecting usb
 ## changed from upstream
 
 - fingerprint sensor idle LED is white instead of blue (`firmware/tiny_touch_unified/main/fingerprint.c`, `set_aura`/`FP_LED_WHITE`). match/enroll results still flash green (success) or red (failure) before returning to white.
+- normal PIV logins now allow the 9d (key management) slot to be used twice per touch instead of once (`firmware/tiny_touch_unified/main/piv.c`, `piv_note_user_presence`/`handle_general_authenticate`). macOS unwraps the Login Keychain secret with a second, separate 9d decrypt beyond the initial PIV auth; the old one-operation-per-slot limit rejected that second call with SW 6982, so macOS silently fell back to prompting for the keychain password on every unlock even after a successful `sc_auth pair`. 9a (auth) still gets one operation per touch, and the pairing/configuration window is unchanged.

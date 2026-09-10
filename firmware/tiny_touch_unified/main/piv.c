@@ -78,9 +78,9 @@ static uint8_t chained_p1;
 static uint8_t chained_p2;
 static TickType_t pin_verified_until;
 static TickType_t user_presence_until;
-static uint8_t user_presence_slots_used;
+static uint8_t user_presence_9a_uses_left;
+static uint8_t user_presence_9d_uses_left;
 static uint8_t user_presence_operations_left;
-static bool user_presence_allows_repeated_slots;
 static TickType_t user_presence_window_ticks;
 
 #define PIV_IDENTITY_SCHEMA 3
@@ -620,27 +620,27 @@ static bool handle_general_authenticate(const uint8_t *apdu, size_t apdu_len,
 
   bool user_presence_valid = deadline_active(user_presence_until,
                                              user_presence_window_ticks);
-  uint8_t slot_bit = apdu[3] == 0x9d ? 0x02 : 0x01;
-  bool slot_already_used = (user_presence_slots_used & slot_bit) != 0;
+  uint8_t *slot_uses_left = apdu[3] == 0x9d ? &user_presence_9d_uses_left
+                                            : &user_presence_9a_uses_left;
   bool operation_limit_reached = user_presence_operations_left == 0;
-  if (!user_presence_valid || operation_limit_reached ||
-      (!user_presence_allows_repeated_slots && slot_already_used)) {
+  if (!user_presence_valid || operation_limit_reached || *slot_uses_left == 0) {
     pin_verified_until = 0;
     if (!user_presence_valid) {
       user_presence_until = 0;
-      user_presence_slots_used = 0;
+      user_presence_9a_uses_left = 0;
+      user_presence_9d_uses_left = 0;
     }
     touch_pin_hid_log_event("piv_crypto_rejected", apdu[3]);
     return append_sw(response, response_len, response_cap, 0x6982);
   }
-  // A normal login permits one operation in 9a and one in 9d. macOS pairing
-  // can use 9d more than once while it creates the Login Keychain wrapper, so
-  // the separately granted configuration window permits a small bounded
-  // sequence of operations.
-  user_presence_slots_used |= slot_bit;
+  // A normal login permits one operation in 9a and two in 9d: macOS unwraps
+  // the Login Keychain secret via a second 9d decrypt beyond the initial PIV
+  // authentication. macOS pairing needs 9d more often still while it creates
+  // the wrapper, so the separately granted configuration window permits a
+  // larger bounded sequence of operations on both slots.
+  (*slot_uses_left)--;
   user_presence_operations_left--;
-  if (user_presence_operations_left == 0 ||
-      (!user_presence_allows_repeated_slots && user_presence_slots_used == 0x03)) {
+  if (user_presence_operations_left == 0) {
     user_presence_until = 0;
   }
 
@@ -769,9 +769,9 @@ void piv_reset_transport_state(void) {
   chained_apdu_data_len = 0;
   pin_verified_until = 0;
   user_presence_until = 0;
-  user_presence_slots_used = 0;
+  user_presence_9a_uses_left = 0;
+  user_presence_9d_uses_left = 0;
   user_presence_operations_left = 0;
-  user_presence_allows_repeated_slots = false;
   user_presence_window_ticks = 0;
   if (piv_mutex) xSemaphoreGive(piv_mutex);
 }
@@ -779,9 +779,9 @@ void piv_reset_transport_state(void) {
 void piv_note_user_presence(void) {
   if (piv_mutex) xSemaphoreTake(piv_mutex, portMAX_DELAY);
   user_presence_until = xTaskGetTickCount() + USER_PRESENCE_WINDOW_TICKS;
-  user_presence_slots_used = 0;
-  user_presence_operations_left = 2;
-  user_presence_allows_repeated_slots = false;
+  user_presence_9a_uses_left = 1;
+  user_presence_9d_uses_left = 2;
+  user_presence_operations_left = 3;
   user_presence_window_ticks = USER_PRESENCE_WINDOW_TICKS;
   if (piv_mutex) xSemaphoreGive(piv_mutex);
 }
@@ -790,9 +790,9 @@ void piv_note_configuration_presence(void) {
   if (piv_mutex) xSemaphoreTake(piv_mutex, portMAX_DELAY);
   user_presence_until =
       xTaskGetTickCount() + CONFIGURATION_PRESENCE_WINDOW_TICKS;
-  user_presence_slots_used = 0;
+  user_presence_9a_uses_left = CONFIGURATION_PIV_OPERATION_LIMIT;
+  user_presence_9d_uses_left = CONFIGURATION_PIV_OPERATION_LIMIT;
   user_presence_operations_left = CONFIGURATION_PIV_OPERATION_LIMIT;
-  user_presence_allows_repeated_slots = true;
   user_presence_window_ticks = CONFIGURATION_PRESENCE_WINDOW_TICKS;
   if (piv_mutex) xSemaphoreGive(piv_mutex);
 }
